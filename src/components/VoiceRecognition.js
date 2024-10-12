@@ -26,7 +26,6 @@ const VoiceRecognition = () => {
   const recognitionRef = useRef(null);
   const chatEndRef = useRef(null);
 
-  //const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000';
   const API_URL = 'https://voiceassistantbackend-production.up.railway.app';
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
@@ -78,6 +77,21 @@ const VoiceRecognition = () => {
     }
   };
 
+  // Touch event handlers for mobile compatibility
+  const handleTouchStart = () => {
+    if (!isRecognitionActive) {
+      recognitionRef.current.start();
+      setIsRecognitionActive(true);
+    }
+  };
+
+  const handleTouchEnd = () => {
+    if (isRecognitionActive) {
+      recognitionRef.current.stop();
+      setIsRecognitionActive(false);
+    }
+  };
+
   useEffect(() => {
     if (chatEndRef.current) {
       chatEndRef.current.scrollIntoView({ behavior: "smooth" });
@@ -122,11 +136,16 @@ const VoiceRecognition = () => {
           aria-label="voice-control"
           onMouseDown={handleMouseDown}
           onMouseUp={handleMouseUp}
+          onTouchStart={handleTouchStart} // Mobile handling
+          onTouchEnd={handleTouchEnd}     // Mobile handling
           sx={{
             boxShadow: '0 4px 20px rgba(0,0,0,0.2)',
             transition: "0.3s",
             '&:hover': {
               transform: "scale(1.1)",
+            },
+            '&:active': {
+              transform: "scale(0.9)",  // Scale down during touch
             },
           }}
         >
