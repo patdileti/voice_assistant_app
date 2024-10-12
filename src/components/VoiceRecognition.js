@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import axios from "axios";
+import { v4 as uuidv4 } from 'uuid';
 import {
   Container,
   Paper,
@@ -9,28 +10,27 @@ import {
   Button,
   AppBar,
   Toolbar,
-  Switch,
-  FormControlLabel,
   Select,
   MenuItem,
   InputLabel,
   FormControl,
-  TextField,
+  IconButton,
 } from "@mui/material";
-import { Mic } from "@mui/icons-material";
+import { Mic, MicOff, VolumeUp, VolumeOff } from "@mui/icons-material";
 import { styled } from "@mui/system";
 
-// Styled components for chat bubbles.
 const ChatBubble = styled(Paper)(({ theme, role }) => ({
   padding: "1rem",
   margin: "0.5rem 0",
   borderRadius: "20px",
   backgroundColor: role === "user" ? "#e0f7fa" : "#e1bee7",
   boxShadow: "0 2px 10px rgba(0, 0, 0, 0.1)",
+  maxWidth: "80%",
+  alignSelf: role === "user" ? "flex-end" : "flex-start",
 }));
 
 const Header = styled(AppBar)({
-  backgroundColor: "#005c99",
+  backgroundColor: "#1976d2",
   color: "#ffffff",
 });
 
@@ -46,17 +46,17 @@ const VoiceRecognition = () => {
 
   const [transcript, setTranscript] = useState("");
   const [response, setResponse] = useState("");
-  const [instructionPrompt, setInstructionPrompt] = useState(""); // New state for instruction prompt
   const [isRecognitionActive, setIsRecognitionActive] = useState(false);
   const [chat, setChat] = useState([]);
   const [isVoiceEnabled, setIsVoiceEnabled] = useState(true);
   const [selectedLanguage, setSelectedLanguage] = useState(languageOptions[0].value);
+  const [sessionId] = useState(uuidv4());
   const recognitionRef = useRef(null);
   const chatEndRef = useRef(null);
   const synthRef = useRef(window.speechSynthesis);
 
-  const API_URL = 'https://voiceassistantbackend-production.up.railway.app';
   //const API_URL = 'http://localhost:5000';
+  const API_URL = 'voiceassistantbackend-production.up.railway.app';
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
   const initializeSpeechRecognition = useCallback(() => {
@@ -82,15 +82,15 @@ const VoiceRecognition = () => {
     setChat((prevChat) => [{ role: "user", content: transcriptText }, ...prevChat]);
 
     try {
-
-      // print instructionPrompt
-      console.log("Sending instructionPrompt to API: ", instructionPrompt)
-      console.log("Sending transcript to API: ", transcriptText)
-      // Include instructionPrompt in request
+      console.log("Sending transcript to API: ", transcriptText);
+      
       const result = await axios.post(`${API_URL}/api/generate-response`, { 
-        transcript: transcriptText, 
-        instructionPrompt: instructionPrompt // Pass the instruction prompt to the API
+        transcript: transcriptText,
+        sessionId: sessionId
       });
+      
+      console.log("API Response:", result.data);
+
       const responseText = result.data.response;
       setResponse(responseText);
       setChat((prevChat) => [{ role: "assistant", content: responseText }, ...prevChat]);
@@ -126,7 +126,7 @@ const VoiceRecognition = () => {
 
   const speak = useCallback((text) => {
     if (isVoiceEnabled && synthRef.current) {
-      synthRef.current.cancel(); // Cancel any ongoing speech
+      synthRef.current.cancel();
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.lang = selectedLanguage;
       utterance.onend = () => console.log('Speech synthesis finished');
@@ -162,7 +162,7 @@ const VoiceRecognition = () => {
   const toggleVoice = () => {
     setIsVoiceEnabled(prev => {
       if (prev) {
-        synthRef.current.cancel(); // Stop ongoing speech when turning off
+        synthRef.current.cancel();
       }
       return !prev;
     });
@@ -181,9 +181,12 @@ const VoiceRecognition = () => {
 
   return (
     <Container maxWidth="sm" sx={{ padding: "1rem", marginTop: "1rem" }}>
-      <Header position="static">
+      <Header position="static" elevation={0}>
         <Toolbar>
-          <Typography variant="h6">Voice Assistant</Typography>
+          <Typography variant="h6" sx={{ flexGrow: 1 }}>Voice Assistant</Typography>
+          <IconButton color="inherit" onClick={toggleVoice}>
+            {isVoiceEnabled ? <VolumeUp /> : <VolumeOff />}
+          </IconButton>
         </Toolbar>
       </Header>
 
@@ -196,23 +199,37 @@ const VoiceRecognition = () => {
           overflowY: "auto",
           margin: "1rem 0",
           boxShadow: "0 4px 20px rgba(0, 0, 0, 0.1)",
+          display: "flex",
+          flexDirection: "column-reverse",
         }}
       >
-        {chat.slice().reverse().map((message, index) => (
+        <div ref={chatEndRef} />
+        {chat.map((message, index) => (
           <ChatBubble key={index} role={message.role}>
             <Typography variant="body1">{message.content}</Typography>
           </ChatBubble>
         ))}
-        <div ref={chatEndRef} />
       </Box>
 
-      <Typography align="center" variant="body2" color="textSecondary" sx={{ marginBottom: "1rem" }}>
-        Press the button or space bar to speak
-      </Typography>
+      <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+        <FormControl variant="outlined" size="small" sx={{ minWidth: 120 }}>
+          <InputLabel id="language-select-label">Language</InputLabel>
+          <Select
+            labelId="language-select-label"
+            id="language-select"
+            value={selectedLanguage}
+            onChange={handleLanguageChange}
+            label="Language"
+          >
+            {languageOptions.map((option) => (
+              <MenuItem key={option.value} value={option.value}>
+                {option.label}
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
 
-      <Box display="flex" justifyContent="center" mb={3}>
         <Fab
-          size="large"
           color={isRecognitionActive ? "secondary" : "primary"}
           aria-label="voice-control"
           onMouseDown={startRecognition}
@@ -230,57 +247,32 @@ const VoiceRecognition = () => {
             },
           }}
         >
-          <Mic />
+          {isRecognitionActive ? <MicOff /> : <Mic />}
         </Fab>
       </Box>
 
-      <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
-        <FormControlLabel
-          control={
-            <Switch
-              checked={isVoiceEnabled}
-              onChange={toggleVoice}
-              color="primary"
-            />
-          }
-          label="Enable Voice"
-        />
-
-        <FormControl variant="outlined" size="small">
-          <InputLabel id="language-select-label">Language</InputLabel>
-          <Select
-            labelId="language-select-label"
-            id="language-select"
-            value={selectedLanguage}
-            onChange={handleLanguageChange}
-            label="Language"
-          >
-            {languageOptions.map((option) => (
-              <MenuItem key={option.value} value={option.value}>
-                {option.label}
-              </MenuItem>
-            ))}
-          </Select>
-        </FormControl>
-      </Box>
-
-      {/* Instruction Prompt Input */}
-      <Box mb={2}>
-      <TextField
-          label="Instruction Prompt"
-          variant="outlined"
-          fullWidth
-          value={instructionPrompt}
-          onChange={(e) => setInstructionPrompt(e.target.value)} // Update state on change
-          helperText="Enter instructions for the assistant response"
-      />
-      </Box>
-
-      <Box display="flex" justifyContent="space-between" sx={{ backgroundColor: "#e7e9eb", padding: "0.5rem", borderRadius: "8px" }}>
-        <Typography variant="body2" color="textSecondary">
+      <Box 
+        display="flex" 
+        justifyContent="space-between" 
+        sx={{ 
+          backgroundColor: "#e7e9eb", 
+          padding: "1rem", 
+          borderRadius: "8px",
+          alignItems: "center"
+        }}
+      >
+        <Typography variant="body1" color="textSecondary" sx={{ fontWeight: 'bold' }}>
           💳 Credits: 8
         </Typography>
-        <Button variant="contained" color="primary" sx={{ borderRadius: "20px" }}>
+        <Button 
+          variant="contained" 
+          color="primary" 
+          sx={{ 
+            borderRadius: "20px",
+            textTransform: 'none',
+            fontWeight: 'bold'
+          }}
+        >
           Buy Credits
         </Button>
       </Box>
