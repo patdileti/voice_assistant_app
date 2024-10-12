@@ -36,7 +36,7 @@ const VoiceRecognition = () => {
 
         try {
           //const result = await axios.post(`${API_URL}/api/generate-response`,{ transcript: transcriptText });
-          const result = await axios.post(`https://voiceassistantapp-production.up.railway.app/api/generate-response`,{ transcript: transcriptText });
+          const result = await axios.post(`https://voiceassistantbackend-production.up.railway.app/api/generate-response`,{ transcript: transcriptText });
           setResponse(result.data.response);
           setChat((prevChat) => [
             { role: "assistant", content: result.data.response },
