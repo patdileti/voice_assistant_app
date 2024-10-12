@@ -15,6 +15,7 @@ import {
   MenuItem,
   InputLabel,
   FormControl,
+  TextField,
 } from "@mui/material";
 import { Mic } from "@mui/icons-material";
 import { styled } from "@mui/system";
@@ -45,6 +46,7 @@ const VoiceRecognition = () => {
 
   const [transcript, setTranscript] = useState("");
   const [response, setResponse] = useState("");
+  const [instructionPrompt, setInstructionPrompt] = useState(""); // New state for instruction prompt
   const [isRecognitionActive, setIsRecognitionActive] = useState(false);
   const [chat, setChat] = useState([]);
   const [isVoiceEnabled, setIsVoiceEnabled] = useState(true);
@@ -54,6 +56,7 @@ const VoiceRecognition = () => {
   const synthRef = useRef(window.speechSynthesis);
 
   const API_URL = 'https://voiceassistantbackend-production.up.railway.app';
+  //const API_URL = 'http://localhost:5000';
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
   const initializeSpeechRecognition = useCallback(() => {
@@ -79,7 +82,15 @@ const VoiceRecognition = () => {
     setChat((prevChat) => [{ role: "user", content: transcriptText }, ...prevChat]);
 
     try {
-      const result = await axios.post(`${API_URL}/api/generate-response`, { transcript: transcriptText });
+
+      // print instructionPrompt
+      console.log("Sending instructionPrompt to API: ", instructionPrompt)
+      console.log("Sending transcript to API: ", transcriptText)
+      // Include instructionPrompt in request
+      const result = await axios.post(`${API_URL}/api/generate-response`, { 
+        transcript: transcriptText, 
+        instructionPrompt: instructionPrompt // Pass the instruction prompt to the API
+      });
       const responseText = result.data.response;
       setResponse(responseText);
       setChat((prevChat) => [{ role: "assistant", content: responseText }, ...prevChat]);
@@ -251,6 +262,18 @@ const VoiceRecognition = () => {
             ))}
           </Select>
         </FormControl>
+      </Box>
+
+      {/* Instruction Prompt Input */}
+      <Box mb={2}>
+      <TextField
+          label="Instruction Prompt"
+          variant="outlined"
+          fullWidth
+          value={instructionPrompt}
+          onChange={(e) => setInstructionPrompt(e.target.value)} // Update state on change
+          helperText="Enter instructions for the assistant response"
+      />
       </Box>
 
       <Box display="flex" justifyContent="space-between" sx={{ backgroundColor: "#e7e9eb", padding: "0.5rem", borderRadius: "8px" }}>
