@@ -56,7 +56,7 @@ const VoiceRecognition = () => {
   const synthRef = useRef(window.speechSynthesis);
 
   //const API_URL = 'http://localhost:5000';
-  const API_URL = 'voiceassistantbackend-production.up.railway.app';
+  const API_URL = 'https://voiceassistantbackend-production.up.railway.app';
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
   const initializeSpeechRecognition = useCallback(() => {
