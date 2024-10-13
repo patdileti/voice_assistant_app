@@ -6,7 +6,6 @@ import {
   Paper,
   Typography,
   Box,
-  Fab,
   Button,
   AppBar,
   Toolbar,
@@ -15,9 +14,10 @@ import {
   InputLabel,
   FormControl,
   IconButton,
+  Slider,
 } from "@mui/material";
 import { Mic, MicOff, VolumeUp, VolumeOff } from "@mui/icons-material";
-import { styled } from "@mui/system";
+import { styled } from "@mui/material/styles";
 
 const ChatBubble = styled(Paper)(({ theme, role }) => ({
   padding: "1rem",
@@ -29,10 +29,30 @@ const ChatBubble = styled(Paper)(({ theme, role }) => ({
   alignSelf: role === "user" ? "flex-end" : "flex-start",
 }));
 
-const Header = styled(AppBar)({
+const Header = styled(AppBar)( {
   backgroundColor: "#1976d2",
   color: "#ffffff",
 });
+
+const VoiceQualityIndicator = styled(Box)(({ theme, quality }) => ({
+  width: '50px',
+  height: '10px',
+  backgroundColor: '#e0e0e0',
+  borderRadius: '5px',
+  overflow: 'hidden',
+  position: 'relative',
+  marginRight: '10px',
+  '&::after': {
+    content: '""',
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    height: '100%',
+    width: `${quality * 100}%`,
+    backgroundColor: quality > 0.7 ? '#4caf50' : quality > 0.4 ? '#ff9800' : '#f44336',
+    transition: 'width 0.3s ease-in-out, background-color 0.3s ease-in-out',
+  },
+}));
 
 const VoiceRecognition = () => {
   const languageOptions = [
@@ -51,31 +71,31 @@ const VoiceRecognition = () => {
   const [isVoiceEnabled, setIsVoiceEnabled] = useState(true);
   const [selectedLanguage, setSelectedLanguage] = useState(languageOptions[0].value);
   const [sessionId] = useState(uuidv4());
+  const [voiceQuality, setVoiceQuality] = useState(0);
   const recognitionRef = useRef(null);
   const chatEndRef = useRef(null);
   const synthRef = useRef(window.speechSynthesis);
+  const audioContextRef = useRef(null);
+  const analyserRef = useRef(null);
+  const microphoneStreamRef = useRef(null);
 
-  //const API_URL = 'http://localhost:5000';
-  const API_URL = 'https://voiceassistantbackend-production.up.railway.app';
+  const [volume, setVolume] = useState(50); // Initial volume state
+  const API_URL = 'http://localhost:5000';
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
-  const initializeSpeechRecognition = useCallback(() => {
-    if (recognitionRef.current) {
-      recognitionRef.current.removeEventListener('result', handleResult);
-      recognitionRef.current.removeEventListener('end', handleEnd);
-      recognitionRef.current.abort();
+  const speak = useCallback((text) => {
+    if (isVoiceEnabled && synthRef.current) {
+      synthRef.current.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = selectedLanguage;
+      utterance.volume = volume / 100; // Set volume based on slider
+      utterance.onend = () => console.log('Speech synthesis finished');
+      utterance.onerror = (event) => console.error('Speech synthesis error', event);
+      synthRef.current.speak(utterance);
     }
+  }, [isVoiceEnabled, selectedLanguage, volume]);
 
-    recognitionRef.current = new SpeechRecognition();
-    recognitionRef.current.continuous = true;
-    recognitionRef.current.interimResults = false;
-    recognitionRef.current.lang = selectedLanguage;
-
-    recognitionRef.current.addEventListener('result', handleResult);
-    recognitionRef.current.addEventListener('end', handleEnd);
-  }, [selectedLanguage]);
-
-  const handleResult = async (event) => {
+  const handleResult = useCallback(async (event) => {
     const current = event.resultIndex;
     const transcriptText = event.results[current][0].transcript;
     setTranscript(transcriptText);
@@ -106,11 +126,44 @@ const VoiceRecognition = () => {
         speak(errorMessage);
       }
     }
-  };
+  }, [API_URL, sessionId, isVoiceEnabled, speak]);
 
-  const handleEnd = () => {
+  const stopVoiceQualityAnalysis = useCallback(() => {
+    if (microphoneStreamRef.current) {
+      microphoneStreamRef.current.getTracks().forEach(track => track.stop());
+      microphoneStreamRef.current = null;
+    }
+    if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
+      audioContextRef.current.close().then(() => {
+        audioContextRef.current = null;
+      }).catch((error) => {
+        console.error("Error closing AudioContext:", error);
+      });
+    }
+    analyserRef.current = null;
+    setVoiceQuality(0);
+  }, []);
+
+  const handleEnd = useCallback(() => {
     setIsRecognitionActive(false);
-  };
+    stopVoiceQualityAnalysis();
+  }, [stopVoiceQualityAnalysis]);
+
+  const initializeSpeechRecognition = useCallback(() => {
+    if (recognitionRef.current) {
+      recognitionRef.current.removeEventListener('result', handleResult);
+      recognitionRef.current.removeEventListener('end', handleEnd);
+      recognitionRef.current.abort();
+    }
+
+    recognitionRef.current = new SpeechRecognition();
+    recognitionRef.current.continuous = true;
+    recognitionRef.current.interimResults = false;
+    recognitionRef.current.lang = selectedLanguage;
+
+    recognitionRef.current.addEventListener('result', handleResult);
+    recognitionRef.current.addEventListener('end', handleEnd);
+  }, [selectedLanguage, SpeechRecognition, handleResult, handleEnd]);
 
   useEffect(() => {
     initializeSpeechRecognition();
@@ -121,31 +174,53 @@ const VoiceRecognition = () => {
         recognitionRef.current.removeEventListener('end', handleEnd);
         recognitionRef.current.abort();
       }
+      stopVoiceQualityAnalysis();
     };
-  }, [initializeSpeechRecognition]);
+  }, [initializeSpeechRecognition, handleResult, handleEnd, stopVoiceQualityAnalysis]);
 
-  const speak = useCallback((text) => {
-    if (isVoiceEnabled && synthRef.current) {
-      synthRef.current.cancel();
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = selectedLanguage;
-      utterance.onend = () => console.log('Speech synthesis finished');
-      utterance.onerror = (event) => console.error('Speech synthesis error', event);
-      synthRef.current.speak(utterance);
+  const startVoiceQualityAnalysis = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      microphoneStreamRef.current = stream;
+      audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
+      analyserRef.current = audioContextRef.current.createAnalyser();
+      const source = audioContextRef.current.createMediaStreamSource(stream);
+      source.connect(analyserRef.current);
+
+      analyserRef.current.fftSize = 256;
+      const bufferLength = analyserRef.current.frequencyBinCount;
+      const dataArray = new Uint8Array(bufferLength);
+
+      const updateVoiceQuality = () => {
+        analyserRef.current.getByteFrequencyData(dataArray);
+        const average = dataArray.reduce((acc, val) => acc + val, 0) / bufferLength;
+        const normalizedQuality = Math.min(average / 128, 1);
+        console.log("Voice quality:", normalizedQuality);
+        setVoiceQuality(normalizedQuality);
+
+        if (isRecognitionActive) {
+          requestAnimationFrame(updateVoiceQuality);
+        }
+      };
+
+      updateVoiceQuality();
+    } catch (error) {
+      console.error("Error accessing microphone:", error);
     }
-  }, [isVoiceEnabled, selectedLanguage]);
+  }, [isRecognitionActive]);
 
   const startRecognition = useCallback(() => {
     if (!isRecognitionActive && recognitionRef.current) {
       try {
         recognitionRef.current.start();
         setIsRecognitionActive(true);
+        startVoiceQualityAnalysis();
       } catch (error) {
         console.error("Failed to start speech recognition:", error);
         setIsRecognitionActive(false);
       }
     }
-  }, [isRecognitionActive]);
+  }, [isRecognitionActive, startVoiceQualityAnalysis]);
 
   const stopRecognition = useCallback(() => {
     if (isRecognitionActive && recognitionRef.current) {
@@ -155,23 +230,24 @@ const VoiceRecognition = () => {
         console.error("Failed to stop speech recognition:", error);
       } finally {
         setIsRecognitionActive(false);
+        stopVoiceQualityAnalysis();
       }
     }
-  }, [isRecognitionActive]);
+  }, [isRecognitionActive, stopVoiceQualityAnalysis]);
 
-  const toggleVoice = () => {
+  const toggleVoice = useCallback(() => {
     setIsVoiceEnabled(prev => {
       if (prev) {
         synthRef.current.cancel();
       }
       return !prev;
     });
-  };
+  }, []);
 
-  const handleLanguageChange = (event) => {
+  const handleLanguageChange = useCallback((event) => {
     setSelectedLanguage(event.target.value);
     stopRecognition();
-  };
+  }, [stopRecognition]);
 
   useEffect(() => {
     if (chatEndRef.current) {
@@ -179,11 +255,19 @@ const VoiceRecognition = () => {
     }
   }, [chat]);
 
+  const handleVolumeChange = (event, newValue) => {
+    setVolume(newValue);
+    if (synthRef.current) {
+      synthRef.current.volume = newValue / 100; // Set volume based on slider
+    }
+  };
+
   return (
     <Container maxWidth="sm" sx={{ padding: "1rem", marginTop: "1rem" }}>
       <Header position="static" elevation={0}>
         <Toolbar>
           <Typography variant="h6" sx={{ flexGrow: 1 }}>Voice Assistant</Typography>
+          <VoiceQualityIndicator quality={voiceQuality} />
           <IconButton color="inherit" onClick={toggleVoice}>
             {isVoiceEnabled ? <VolumeUp /> : <VolumeOff />}
           </IconButton>
@@ -229,26 +313,28 @@ const VoiceRecognition = () => {
           </Select>
         </FormControl>
 
-        <Fab
-          color={isRecognitionActive ? "secondary" : "primary"}
-          aria-label="voice-control"
-          onMouseDown={startRecognition}
-          onMouseUp={stopRecognition}
-          onTouchStart={startRecognition}
-          onTouchEnd={stopRecognition}
-          sx={{
-            boxShadow: '0 4px 20px rgba(0,0,0,0.2)',
-            transition: "0.3s",
-            '&:hover': {
-              transform: "scale(1.1)",
-            },
-            '&:active': {
-              transform: "scale(0.9)",
-            },
-          }}
-        >
-          {isRecognitionActive ? <MicOff /> : <Mic />}
-        </Fab>
+        <Box sx={{ display: 'flex', alignItems: 'center', width: '100%' }}>
+          <Slider
+            value={volume}
+            onChange={handleVolumeChange}
+            aria-labelledby="volume-slider"
+            sx={{ width: 200, margin: '0 1rem' }}
+          />
+          <Button
+            variant="contained"
+            color={isRecognitionActive ? "secondary" : "primary"}
+            onMouseDown={startRecognition}
+            onMouseUp={stopRecognition}
+            onTouchStart={startRecognition}
+            onTouchEnd={stopRecognition}
+            sx={{ flexGrow: 1, borderRadius: "20px", height: "60px" }} // Adjust height and rounded corners
+          >
+            {isRecognitionActive ? <MicOff fontSize="large" /> : <Mic fontSize="large" />}
+            <Typography sx={{ marginLeft: "0.5rem" }}>
+              {isRecognitionActive ? "Listening..." : "Hold to Talk"}
+            </Typography>
+          </Button>
+        </Box>
       </Box>
 
       <Box 
