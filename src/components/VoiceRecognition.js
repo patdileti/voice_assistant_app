@@ -80,7 +80,8 @@ const VoiceRecognition = () => {
   const microphoneStreamRef = useRef(null);
 
   const [volume, setVolume] = useState(50); // Initial volume state
-  const API_URL = 'http://localhost:5000';
+  //const API_URL = 'http://localhost:5000';
+  const API_URL = 'https://voiceassistantbackend-production.up.railway.app';
   const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 
   const speak = useCallback((text) => {
